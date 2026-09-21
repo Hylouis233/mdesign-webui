@@ -2,83 +2,83 @@
 
 Run the MiniMax Design desktop app in your browser.
 
-把 MiniMax Design 桌面版搬进浏览器。渲染端和 gateway 都是官方桌面版的原生组件，本项目用一个零依赖的 Node 反代替代 Electron 壳，让整套应用跑在 Linux 服务器上，浏览器直接访问。
+mdesign-webui replaces the Electron shell of the official MiniMax Design desktop app with a zero-dependency Node reverse proxy, so the app's own renderer and gateway run on a Linux server and you open the result directly in a browser. Nothing is reimplemented — the UI you see is the real desktop front end.
 
-桌面版资产归 MiniMax 所有，不在仓库里。用 `deploy/extract-from-app.sh` 从你自己的已安装副本提取一次，之后桌面版可以卸载。
+Desktop app assets belong to MiniMax and are not in this repository. Run `deploy/extract-from-app.sh` once on a machine that has the app installed; after that the app is no longer needed.
 
-> **声明**：本项目与 MiniMax 无关，未获其认可。MiniMax Design、Hailuo 等名称与商标归其权利人所有。项目仅供学习与技术研究，不得商用；按原样提供，不附担保，使用后果自负。请遵守桌面版许可协议与当地法律，仅在拥有合法副本的机器上提取资产。
+> **Disclaimer**: This is an unofficial project for learning and technical research. It is not affiliated with or endorsed by MiniMax. "MiniMax Design", "Hailuo" and related names are trademarks of their respective owners. The code is provided as-is, without warranty, and must not be used commercially; you are responsible for your own use. Respect the desktop app's license agreement and local law, and only extract assets from copies you legitimately own.
 
-## 工作原理
+## How it works
 
 ```
-浏览器 ── http://<server>:80 ── mdesign-webui.mjs，零依赖 Node 服务
-   ├─ /            渲染端静态文件，注入 __HILO_CONFIG__ 与 shim.js 后下发
-   ├─ /api /ws 等  反代到 hilo gateway 127.0.0.1:8001，由 gateway 访问云端
-   ├─ /m3          反代到 m3-proxy 127.0.0.1:8319，提供 mcode 订阅的 MiniMax-M3
-   └─ /comfy       反代到 ComfyUI 127.0.0.1:8188
+Browser ── http://<server>:80 ── mdesign-webui.mjs, a zero-dependency Node service
+   ├─ /             static renderer files, served with __HILO_CONFIG__ and shim.js injected
+   ├─ /api /ws ...  reverse proxy to the hilo gateway at 127.0.0.1:8001, which talks to the cloud
+   ├─ /m3           reverse proxy to m3-proxy at 127.0.0.1:8319, serving MiniMax-M3 from an mcode subscription
+   └─ /comfy        reverse proxy to ComfyUI at 127.0.0.1:8188
 ```
 
-- 渲染端就是 app.asar 里的 `/out/renderer`。官方代码自带浏览器降级，注入指向同源 gateway 的配置后即可脱离 Electron 运行。
-- `shim.js` 顶替桌面版 preload 暴露的 `window.hilo`：IPC 调用降级为可观察的空操作，登录态改从 gateway 读取，窗口、通知等桌面能力全部优雅降级。
-- 登录靠播种。桌面版由 Electron 主进程把账号 token 推给 gateway，这里由本服务定时读取 m3-proxy 的续期产物完成同样的事，gateway 就能以你的账号访问云端。
-- gateway 必须以 `NODE_ENV=production` 运行，否则会指向内部预发环境，一般网络不可达。
-- 另有 18188 探测口把 gateway 的 ComfyUI 集成桥到本机实例，画布里的 ComfyUI 面板因此可用。
+- The renderer is the desktop app's `/out/renderer` from app.asar. It ships with a browser fallback, so once it is injected with a config pointing at the same-origin gateway it runs outside Electron.
+- `shim.js` stands in for the `window.hilo` bridge that the desktop preload exposes: IPC calls become observable no-ops, auth state is read from the gateway instead, and window, notification and other desktop-only capabilities degrade gracefully.
+- Login works by seeding. The desktop app's Electron main process pushes your account token to the gateway; here the service periodically reads m3-proxy's renewed token and posts it to the gateway, so the gateway accesses the cloud as your account.
+- The gateway must run with `NODE_ENV=production`; otherwise it targets an internal pre-release environment that is unreachable on most networks.
+- A probe listener on port 18188 bridges the gateway's ComfyUI integration to your local ComfyUI instance, so the ComfyUI panel inside the canvas works.
 
-## 快速开始
+## Quick start
 
-需要 Linux 服务器、Node 22+、Python 3、ffmpeg。opencode 和 ComfyUI 是可选项，分别对应聊天与图像功能。
+You need a Linux server with Node 22+, Python 3 and ffmpeg. opencode and ComfyUI are optional and enable chat and image features respectively.
 
 ```bash
-# 1. 在装过桌面版的 mac 上提取资产
+# 1. Extract assets on a mac that has the desktop app installed
 bash deploy/extract-from-app.sh
 
-# 2. 上传资产并生成密钥模板
+# 2. Upload the assets and generate the secrets template
 SSH_DST=root@<server> bash deploy/install-on-server.sh
 
-# 3. 编辑服务器上的 mweb/env 填入真实密钥，然后安装服务并启动
+# 3. Fill in the real secrets in mweb/env on the server, then install and start the services
 SSH_DST=root@<server> bash deploy/install-on-server.sh --units
 ```
 
-打开 `http://<server>/`。LLM 端点用仓库里的 m3-proxy，先按 [m3-proxy/README.md](m3-proxy/README.md) 跑起来并在 `mweb/env` 里接好，登录态即可全自动维持。
+Open `http://<server>/`. For the LLM endpoint, start the bundled m3-proxy following [m3-proxy/README.md](m3-proxy/README.md) and wire it up in `mweb/env`; the login state then maintains itself.
 
-原生模块需要与 gateway bundle 对齐：`better-sqlite3@12.11.1`、`sharp@0.35.4`、`@node-rs/xxhash@1.7.6`。npm 上没有 12.11.2，装 12.11.1 即可，API 兼容。
+Native modules must match the gateway bundle: `better-sqlite3@12.11.1`, `sharp@0.35.4`, `@node-rs/xxhash@1.7.6`. Version 12.11.2 does not exist on npm; 12.11.1 is API-compatible.
 
-## 登录
+## Login
 
-webui 没有登录页。所谓登录，就是把你自己 MiniMax 账号的 token 播种给 gateway。
+There is no login page. Logging in means seeding the gateway with a token from your own MiniMax account.
 
-推荐交给 m3-proxy：token 临期自动续期，webui 每次播种拿到的都是新 token，全程免维护。不想跑 m3-proxy 就手写 token 文件，路径填进 `MWEB_TOKEN_FILE`，过期后手动更新：
+The recommended way is m3-proxy: it renews the token before it expires, so every seed uses a fresh token and nothing needs manual care. Without m3-proxy, write a token file by hand, point `MWEB_TOKEN_FILE` at it, and update it yourself when it expires:
 
 ```json
-{"auth": {"accessToken": "<JWT>", "realUserID": "<数字ID>"}}
+{"auth": {"accessToken": "<JWT>", "realUserID": "<numeric user id>"}}
 ```
 
-日志出现 `seed: gateway /api/auth/token -> 200`、页面能加载模型目录，就是登录成功。没有登录态时静态页面与 ComfyUI 面板仍可用，模型目录、技能市场、云端生成一律 401。
+If the log shows `seed: gateway /api/auth/token -> 200` and the model catalog loads, you are logged in. Without a login the static pages and the ComfyUI panel still work, but the model catalog, the skill market and cloud generation all return 401.
 
-## 路由与鉴权
+## Routes and auth
 
-| 端点 | 上游 | 鉴权 |
+| Endpoint | Upstream | Auth |
 |---|---|---|
-| `/` 静态资源 | 本地 renderer | 无 |
-| `/api` `/backend` `/files` `/ws` | hilo gateway | 无，切勿暴露公网 |
-| `/comfy/*` `/comfy/ws` | ComfyUI | 服务端注入 Bearer JWT |
-| `/m3/*` | m3-proxy | 服务端注入 Bearer |
-| `/mweb/health` | 自身状态 | 无 |
+| `/` static | local renderer | none |
+| `/api` `/backend` `/files` `/ws` | hilo gateway | none — do not expose to the public internet |
+| `/comfy/*` `/comfy/ws` | ComfyUI | Bearer JWT injected server-side |
+| `/m3/*` | m3-proxy | Bearer injected server-side |
+| `/mweb/health` | self status | none |
 
-配置可走环境变量或 `config.json`，模板在 `config.example.json` 和 `mweb/env.example`。优先级：环境变量、`config.json`、默认值依次降低。
+Configuration comes from environment variables or `config.json`; templates are `config.example.json` and `mweb/env.example`. Precedence: environment variables, then `config.json`, then defaults.
 
-## 测试
+## Tests
 
 ```bash
 node --test
 ```
 
-零依赖冒烟测试，覆盖配置注入、静态服务、反代、前缀路由与路径穿越防护。
+Zero-dependency smoke tests covering config injection, static serving, the reverse proxy, prefix routing and path traversal protection.
 
-## 安全
+## Security
 
-本服务假定运行在隔离内网，gateway 免鉴权是桌面版原生设计，不要直接暴露公网。密钥清单与信任模型见 [SECURITY.md](SECURITY.md)。
+The service assumes an isolated internal network. The gateway trusts loopback callers by desktop design; never expose it directly to the public internet. See [SECURITY.md](SECURITY.md) for the secret inventory and the trust model.
 
 ## License
 
-MIT，仅覆盖本仓库代码，提取所得的桌面版资产归其权利人所有。本项目仅供学习与技术研究，请勿用于商业或生产用途。
+MIT, covering only the code in this repository. Extracted desktop assets belong to their owner. This project is for learning and technical research only — no commercial or production use.
