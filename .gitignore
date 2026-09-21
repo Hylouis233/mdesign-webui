@@ -1,0 +1,25 @@
+# 部署产物与密钥（不入库）
+config.json
+mweb/env
+m3_token*.json
+m3_token_renewed.json
+.device-id
+.gateway_token
+*.token
+out/
+deploy/out/
+renderer/
+gateway/
+bundled-plugins/
+conf/
+mcp-tools/
+agent-profiles/
+project-templates/
+opencode-plugin-hilo/
+hilo-home/
+hilo-data/
+node_modules/
+downloads/
+__pycache__/
+.DS_Store
+._*

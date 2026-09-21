@@ -1,0 +1,21 @@
+{
+  "_comment": "mdesign-webui 配置模板。部署时复制为 config.json（或用环境变量/EnvironmentFile 覆盖），真实值不入库。",
+  "MWEB_PORT": "80",
+  "MWEB_BIND": "0.0.0.0",
+  "MWEB_RENDERER_DIR": "/opt/m4e/webui/renderer",
+  "MWEB_GATEWAY": "http://127.0.0.1:8001",
+  "MWEB_COMFY_URL": "http://127.0.0.1:8188",
+  "MWEB_COMFY_TOKEN": "<COMFYUI_BEARER_JWT>",
+  "MWEB_COMFY_PREFIX": "/comfy",
+  "MWEB_M3_URL": "http://127.0.0.1:8319",
+  "MWEB_M3_TOKEN": "<M3_PROXY_TOKEN>",
+  "MWEB_M3_PREFIX": "/m3",
+  "MWEB_TOKEN_FILE": "/opt/m4e/m3-proxy/m3_token.json",
+  "MWEB_TOKEN_RENEWED_FILE": "/opt/m4e/m3-proxy/m3_token_renewed.json",
+  "MWEB_SEED_INTERVAL_SEC": "600",
+  "MWEB_APP_VERSION": "3.0.17",
+  "MWEB_REGION": "domestic",
+  "MWEB_PUBLIC_ORIGIN": "",
+  "MWEB_COMFY_FORWARD": "0.0.0.0:18188",
+  "MWEB_REWRITE_BACKEND": "http://<服务器地址>:18188"
+}
