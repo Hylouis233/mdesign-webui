@@ -66,7 +66,16 @@ SSH_DST=root@<server> bash deploy/install-on-server.sh --units
 （registry 上 12.11.2 不存在，取 12.11.1，API 兼容）。
 
 配置可走环境变量或 `config.json`（模板 `config.example.json`）；systemd 用
-`mweb/env`（模板 `mweb/env.example`）。
+`mweb/env`（模板 `mweb/env.example`）。优先级：**环境变量 > `config.json` > 内置默认值**。
+
+## 测试
+
+零依赖冒烟测试（`node --test`，Node>=18）：起临时 renderer + mock gateway，
+覆盖配置注入、静态服务、gateway 反代、前缀路由与路径穿越防护。
+
+```bash
+node --test
+```
 
 ## 路由与鉴权约定
 

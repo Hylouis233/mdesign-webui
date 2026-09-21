@@ -143,7 +143,9 @@ function injectConfig(html, origin) {
   };
   const shim = `<script>window.__HILO_CONFIG__=${JSON.stringify(cfg)};</script>` +
     `<script>${shimScript().replace(/<\/script>/g, "<\\/script>")}</script>`;
-  return html.replace("<head>", "<head>\n" + shim);
+  const out = html.replace(/<head(\s[^>]*)?>/i, (m) => m + "\n" + shim);
+  if (out === html) log("warn: index.html 无 <head>，__HILO_CONFIG__ 未注入");
+  return out;
 }
 
 function serveStatic(req, res, filePath) {
@@ -189,6 +191,8 @@ function proxyHttp(req, res, upstreamBase, extraHeaders, prefixToStrip = "", rew
     ur.pipe(res);
   });
   up.on("error", (e) => { try { json(res, 502, { error: "upstream: " + String(e.message || e).slice(0, 200) }); } catch {} });
+  // 客户端提前断开时释放上游连接（正常结束时 writableEnded 已置位，不误杀）
+  res.on("close", () => { if (!res.writableEnded) up.destroy(); });
   req.pipe(up);
 }
 
@@ -243,7 +247,8 @@ const server = http.createServer((req, res) => {
   }
 
   // gateway 反代（渲染端 API 面；可把响应里的托管后端 origin 改写为公网可达值）
-  if (GATEWAY_PREFIXES.some((p) => urlPath === p || urlPath.startsWith(p))) {
+  const prefixHit = (p) => urlPath === p || urlPath.startsWith(p.endsWith("/") ? p : p + "/");
+  if (GATEWAY_PREFIXES.some(prefixHit)) {
     const rw = CFG.rewriteBackend ? ["127.0.0.1:18188", CFG.rewriteBackend.replace(/^https?:\/\//, "")] : [];
     return proxyHttp(req, res, CFG.gateway, {}, "", rw[0] || "", rw[1] || "");
   }
@@ -252,8 +257,12 @@ const server = http.createServer((req, res) => {
   if (req.method !== "GET" && req.method !== "HEAD") return json(res, 405, { error: "method" });
   let rel = urlPath === "/" ? "/index.html" : urlPath;
   rel = rel.replace(/\/+$/, "/index.html");
+  try { rel = decodeURIComponent(rel); } catch { return json(res, 400, { error: "bad url" }); }
   const filePath = path.normalize(path.join(CFG.rendererDir, rel));
-  if (!filePath.startsWith(CFG.rendererDir)) return json(res, 403, { error: "forbidden" });
+  // 解码+规整后必须仍落在 rendererDir 之内（带 path.sep，防同名前缀兄弟目录绕过）
+  if (filePath !== CFG.rendererDir && !filePath.startsWith(CFG.rendererDir + path.sep)) {
+    return json(res, 403, { error: "forbidden" });
+  }
   if (filePath.endsWith("index.html")) {
     fs.readFile(filePath, "utf8", (err, html) => {
       if (err) return json(res, 404, { error: "renderer missing (run extract step)" });
@@ -291,18 +300,23 @@ server.listen(CFG.port, CFG.bind, () => {
 // gateway 的 ComfyUI 集成恒定探测 127.0.0.1:18188（原生托管 fork 端口）。
 // 服务器上没有 linux 托管包，用它桥到现有 8188 实例，模型即那一套。
 if (CFG.comfyForward && CFG.comfyUrl) {
-  const [fwdBind, fwdPort] = CFG.comfyForward.split(":");
-  const fwd = http.createServer((req, res) => {
-    const h = {};
-    if (CFG.comfyToken) h["Authorization"] = "Bearer " + CFG.comfyToken;
-    proxyHttp(req, res, CFG.comfyUrl, h);
-  });
-  fwd.on("upgrade", (req, socket, head) => {
-    const h = {};
-    if (CFG.comfyToken) h["Authorization"] = "Bearer " + CFG.comfyToken;
-    proxyUpgrade(req, socket, head, CFG.comfyUrl, h);
-  });
-  fwd.listen(parseInt(fwdPort, 10), fwdBind || "0.0.0.0", () => {
-    log(`comfy-forward ${fwdBind}:${fwdPort} -> ${CFG.comfyUrl} (auth injected)`);
-  });
+  const fwdMatch = CFG.comfyForward.match(/^([A-Za-z0-9._-]+):(\d+)$/);
+  if (!fwdMatch) {
+    log("comfy-forward: MWEB_COMFY_FORWARD 应为 host:port（如 0.0.0.0:18188），忽略: " + CFG.comfyForward);
+  } else {
+    const fwdBind = fwdMatch[1], fwdPort = fwdMatch[2];
+    const fwd = http.createServer((req, res) => {
+      const h = {};
+      if (CFG.comfyToken) h["Authorization"] = "Bearer " + CFG.comfyToken;
+      proxyHttp(req, res, CFG.comfyUrl, h);
+    });
+    fwd.on("upgrade", (req, socket, head) => {
+      const h = {};
+      if (CFG.comfyToken) h["Authorization"] = "Bearer " + CFG.comfyToken;
+      proxyUpgrade(req, socket, head, CFG.comfyUrl, h);
+    });
+    fwd.listen(parseInt(fwdPort, 10), fwdBind || "0.0.0.0", () => {
+      log(`comfy-forward ${fwdBind}:${fwdPort} -> ${CFG.comfyUrl} (auth injected)`);
+    });
+  }
 }

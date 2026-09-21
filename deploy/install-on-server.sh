@@ -11,6 +11,7 @@
 #   SSH_DST=root@<server> bash install-on-server.sh          # 上传资产+写密钥模板
 #   #    手工编辑 mweb/env 填真实密钥，然后：
 #   SSH_DST=root@<server> bash install-on-server.sh --units  # 装 systemd 并启动
+# shellcheck disable=SC2029  # 远端命令里的 $REMOTE_DIR/$SRV_USER/$OPENCODE_BIN 刻意在本地展开后整体下发
 set -euo pipefail
 
 SSH_DST="${SSH_DST:?请设置 SSH_DST=root@<server>}"
@@ -116,6 +117,11 @@ systemctl daemon-reload"
 echo "[5/7] 启动 ..."
 ssh "$SSH_DST" "systemctl enable --now mdesign-gateway.service mdesign-opencode.service mdesign-webui.service"
 
-echo "[6/7] 冒烟 ..."
-ssh "$SSH_DST" "sleep 8; curl -sf http://127.0.0.1/mweb/health && echo; curl -sf http://127.0.0.1/api/health && echo; curl -sf http://127.0.0.1/comfy/system_stats | head -c 120 && echo; curl -sf http://127.0.0.1/m3/v1/models | head -c 120 && echo"
+echo "[6/7] 冒烟（逐项提示，不中断）..."
+ssh "$SSH_DST" 'sleep 8
+smoke() { if curl -sf --max-time 5 "$2" >/dev/null; then echo "  OK   $1"; else echo "  WARN $1 未能访问（对照前置条件排查：$2）"; fi; }
+smoke "webui  /mweb/health"       http://127.0.0.1/mweb/health
+smoke "gateway /api/health"       http://127.0.0.1/api/health
+smoke "comfy   /comfy/system_stats" http://127.0.0.1/comfy/system_stats
+smoke "m3      /m3/v1/models"     http://127.0.0.1/m3/v1/models'
 echo "[7/7] 完成：浏览器打开 http://<服务器地址>/"
