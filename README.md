@@ -21,7 +21,7 @@
    │                           ├─ 云端 design.minimax.cn（登录态=播种的 mcode token）
    │                           └─ opencode serve（127.0.0.1:4096，agent 会话后端）
    ├─ /comfy/*              → ComfyUI 8188（服务端注入 Bearer，浏览器免持 token）
-   ├─ /m3/*                 → m3-proxy 8319（OpenAI 兼容 LLM 端点）
+   ├─ /m3/*                 → m3-proxy 8319（本仓 m3-proxy/，OpenAI 兼容 LLM 端点）
    └─ :18188                → ComfyUI 8188（gateway 的 ComfyUI 集成探测口，鉴权注入）
 ```
 
@@ -32,8 +32,9 @@
 - **shim.js**：替代 preload 的 `window.hilo`（ipcRenderer/auth/diagnostics…），
   `ipcRenderer.invoke` 全部可观察 no-op，桌面专属能力优雅降级。
 - **登录态播种**：桌面版由 Electron 主进程 `POST /api/auth/token` 推 token；webui 版
-  由本服务读 m3-proxy 的 token 文件（含续期产物）定时播种，gateway 即以你自己的
-  MiniMax 账号访问云端（模型目录/技能市场 200）。
+  由本服务读 m3-proxy 的 token 文件（含续期产物——m3-proxy 临期自动续期，见
+  `m3-proxy/README.md`）定时播种，gateway 即以你自己的 MiniMax 账号访问云端
+  （模型目录/技能市场 200）。
 - **opencode 集成**：gateway 的 agent 会话后端指向本机 `opencode serve`
   （127.0.0.1:4096）；opencode 以 `HOME=<部署目录>/hilo-home` 隔离运行，插件
   （opencode-plugin-hilo）从桌面版资产中一并提取。
@@ -51,7 +52,8 @@
 ## 部署
 
 ```bash
-# 0) 服务器前置：node>=22、ffmpeg、opencode(opencode.ai)、ComfyUI(8188,Bearer)、m3-proxy(8319)
+# 0) 服务器前置：node>=22、ffmpeg、opencode(opencode.ai)、ComfyUI(8188,Bearer)
+#    m3-proxy 用本仓 m3-proxy/（见其 README），先起它再起 webui
 
 # 1) 本机（装有 MiniMax Design 桌面版）提取资产
 bash deploy/extract-from-app.sh
@@ -76,6 +78,21 @@ SSH_DST=root@<server> bash deploy/install-on-server.sh --units
 ```bash
 node --test
 ```
+
+## 登录与账号（webui 没有登录页）
+
+webui 的"登录"= 把**你自己 MiniMax 账号的 token** 播种给 gateway（桌面版由
+Electron 主进程做，webui 版由 seeder 做）。token 来源三选一：
+
+1. **m3-proxy 自动续期（推荐）**：`MWEB_TOKEN_RENEWED_FILE` 指向 m3-proxy 的
+   `m3_token_renewed.json`，token 永远新鲜，零手工维护（接线见 `m3-proxy/README.md`）
+2. **手工 token 文件**：`MWEB_TOKEN_FILE` 指向自写文件
+   `{"auth":{"accessToken":"<JWT>","realUserID":"<数字ID>"}}`；过期需手动更新
+3. **mcode CLI 在本机**：Node 版 m3-proxy 直接读它的凭据文件
+
+验证：日志出现 `seed: gateway /api/auth/token -> 200`，浏览器里模型目录/技能市场
+能拉出列表即登录成功。无登录态时静态 UI 与 `/comfy/*`（ComfyUI 面板）仍可用，
+但模型目录/技能市场/云端聊天与生成一律 401。
 
 ## 路由与鉴权约定
 

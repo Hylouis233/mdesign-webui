@@ -1,6 +1,8 @@
 # 部署产物与密钥（不入库）
 config.json
 mweb/env
+m3-proxy/env
+m3-proxy/myenv
 m3_token*.json
 m3_token_renewed.json
 .device-id

@@ -7,6 +7,9 @@
 | `mweb/env` | systemd EnvironmentFile：上游地址 + `MWEB_COMFY_TOKEN`（ComfyUI Bearer JWT）+ `MWEB_M3_TOKEN`（m3-proxy PROXY_TOKEN）+ token 文件路径 | 0600 |
 | `config.json` | 环境变量等价物（可选，二选一） | 0600 |
 | `m3_token.json` / `m3_token_renewed.json` | m3-proxy 维护的账号登录态（accessToken），本服务只读并播种给 gateway | m3-proxy 侧 0600 |
+| `m3-proxy/m3_token.json` / `m3_token_renewed.json` | m3-proxy（Python 版）的账号凭据与续期产物 | 0600 |
+| `m3-proxy/env`（`PROXY_TOKEN`） | m3-proxy 调用方令牌；webui 的 `MWEB_M3_TOKEN` 与 seeder 复用同一值 | 0600 |
+| `~/.minimax/cli-auth/**` | mcode CLI 凭据（m3-proxy Node 版直接读取，本仓不落盘不修改） | mcode 自管 |
 | `.device-id` | 首次启动自动生成的随机 UUID（渲染端设备身份） | 自动 0600 |
 | ComfyUI systemd drop-in | `SECRET_KEY`（鉴权插件签发 JWT 用）+ 长寿命 JWT | 0600，服务器本地 |
 
